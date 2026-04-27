@@ -1,5 +1,7 @@
 """Sandbox client. Use from the master process."""
 
+import atexit
+import base64
 import re
 import secrets
 import socket
@@ -10,6 +12,17 @@ from pathlib import Path
 import dns.resolver
 import httpx
 from huggingface_hub import cancel_job, fetch_job_logs, get_token, run_job
+
+_active: set["Sandbox"] = set()
+
+
+@atexit.register
+def _terminate_all_active():
+    for sb in list(_active):
+        try:
+            sb.terminate()
+        except Exception:
+            pass
 
 # Some local resolvers (e.g. systemd-resolved) return NXDOMAIN for fresh
 # trycloudflare.com subdomains even though public DNS resolves them fine.
@@ -84,6 +97,7 @@ class Sandbox:
         _register_public_dns_override(url.split("://", 1)[1].split("/", 1)[0])
         sb = cls(job.id, url, token)
         sb._wait_healthy()
+        _active.add(sb)
         return sb
 
     @staticmethod
@@ -119,17 +133,23 @@ class Sandbox:
             args=list(cmd), returncode=r["rc"], stdout=r["stdout"], stderr=r["stderr"],
         )
 
-    def write_file(self, path: str, content: str):
-        r = self._http.post(f"{self.url}/write", json={"path": path, "content": content})
+    def write_file(self, path: str, content: str | bytes):
+        if isinstance(content, bytes):
+            payload = {"path": path, "content_b64": base64.b64encode(content).decode()}
+        else:
+            payload = {"path": path, "content": content}
+        r = self._http.post(f"{self.url}/write", json=payload)
         r.raise_for_status()
 
-    def read_file(self, path: str) -> str:
+    def read_file(self, path: str, text: bool = True) -> str | bytes:
         r = self._http.post(f"{self.url}/read", json={"path": path})
         if r.status_code == 404:
             raise FileNotFoundError(r.json().get("detail", path))
         r.raise_for_status()
-        return r.json()["content"]
+        data = base64.b64decode(r.json()["content_b64"])
+        return data.decode("utf-8") if text else data
 
     def terminate(self):
         self._http.close()
         cancel_job(job_id=self.job_id)
+        _active.discard(self)

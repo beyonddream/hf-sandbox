@@ -1,5 +1,6 @@
 """RPC server. Runs inside the sandbox container."""
 
+import base64
 import os
 import subprocess
 from pathlib import Path
@@ -37,7 +38,10 @@ def exec_(req: dict, _=Depends(auth)):
 
 @app.post("/write")
 def write(req: dict, _=Depends(auth)):
-    Path(req["path"]).write_text(req["content"])
+    if "content_b64" in req:
+        Path(req["path"]).write_bytes(base64.b64decode(req["content_b64"]))
+    else:
+        Path(req["path"]).write_text(req["content"])
     return {"ok": True}
 
 
@@ -46,7 +50,7 @@ def read(req: dict, _=Depends(auth)):
     p = Path(req["path"])
     if not p.exists():
         raise HTTPException(404, f"file not found: {req['path']}")
-    return {"content": p.read_text()}
+    return {"content_b64": base64.b64encode(p.read_bytes()).decode()}
 
 
 @app.get("/health")
