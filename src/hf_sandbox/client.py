@@ -42,10 +42,13 @@ def _register_public_dns_override(hostname: str, timeout: float = 120) -> None:
     raise TimeoutError(f"DNS for {hostname} never propagated within {timeout}s")
 
 _SERVER_SRC = (Path(__file__).parent / "server.py").read_text()
+_CLOUDFLARED_VERSION = "2026.3.0"
+_FASTAPI_VERSION = "0.115.0"
+_UVICORN_VERSION = "0.30.6"
 
 _BOOTSTRAP = f"""set -e
-pip install -q fastapi uvicorn
-python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64', '/tmp/cf')"
+pip install -q fastapi=={_FASTAPI_VERSION} uvicorn=={_UVICORN_VERSION}
+python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/cloudflare/cloudflared/releases/download/{_CLOUDFLARED_VERSION}/cloudflared-linux-amd64', '/tmp/cf')"
 chmod +x /tmp/cf
 cat > /tmp/server.py << 'PYEOF'
 {_SERVER_SRC}
@@ -64,13 +67,16 @@ class Sandbox:
         self._http = httpx.Client(headers={"Authorization": f"Bearer {token}"})
 
     @classmethod
-    def create(cls, image: str, flavor: str = "cpu-basic", timeout: str = "1h"):
+    def create(cls, image: str, flavor: str = "cpu-basic", timeout: str = "1h",
+               forward_hf_token: bool = False):
         token = secrets.token_urlsafe(32)
+        job_secrets = {"HF_SANDBOX_TOKEN": token}
+        if forward_hf_token:
+            job_secrets["HF_TOKEN"] = get_token()
         job = run_job(
             image=image,
             command=["bash", "-c", _BOOTSTRAP],
-            env={"HF_SANDBOX_TOKEN": token},
-            secrets={"HF_TOKEN": get_token()},
+            secrets=job_secrets,
             flavor=flavor,
             timeout=timeout,
         )

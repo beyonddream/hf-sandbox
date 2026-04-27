@@ -37,3 +37,11 @@ Requires `huggingface-cli login` (the same token is forwarded to the sandbox so 
 
 - Image must have Python + `pip` (used to install the RPC server and download `cloudflared`).
 - Cloudflare's free `trycloudflare.com` URLs are best-effort — fine for benchmarks, not production.
+
+## Security
+
+The sandbox runs **untrusted code by design**. A few things to be aware of:
+
+- **HF token forwarding is opt-in.** By default, your HF token is *not* exposed to the sandbox. Pass `forward_hf_token=True` to `Sandbox.create()` if your workload needs it. With it enabled, anything running inside the sandbox can read the token from `/proc/self/environ` and use it to act as you on the Hub.
+- **Cloudflare sees all tunnel traffic.** Requests, responses, and the auth token transit Cloudflare's infrastructure (via `trycloudflare.com`). They state they don't log it, but it's a trust relationship. Don't run sensitive workloads through it.
+- **Auth token** is a 256-bit random URL-safe string per sandbox, sent as `Bearer` on every authenticated endpoint. The tunnel URL alone gets you nothing.
