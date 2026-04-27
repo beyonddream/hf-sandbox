@@ -1,8 +1,9 @@
-"""HFSandbox client. Use from the master process."""
+"""Sandbox client. Use from the master process."""
 
 import re
 import secrets
 import socket
+import subprocess
 import time
 from pathlib import Path
 
@@ -56,7 +57,7 @@ exec /tmp/cf tunnel --url http://localhost:8000 --no-autoupdate 2>&1
 _URL_RE = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
 
 
-class HFSandbox:
+class Sandbox:
     def __init__(self, job_id: str, url: str, token: str):
         self.job_id = job_id
         self.url = url
@@ -101,13 +102,16 @@ class HFSandbox:
             time.sleep(1)
         raise TimeoutError(f"sandbox at {self.url} never became healthy")
 
-    def exec(self, cmd: list[str], cwd: str | None = None, stdin: str | None = None,
-             timeout: int = 600) -> dict:
-        return self._http.post(
+    def exec(self, *cmd: str, workdir: str | None = None, stdin: str | None = None,
+             timeout: int = 600) -> subprocess.CompletedProcess:
+        r = self._http.post(
             f"{self.url}/exec",
-            json={"cmd": cmd, "cwd": cwd, "stdin": stdin, "timeout": timeout},
+            json={"cmd": list(cmd), "workdir": workdir, "stdin": stdin, "timeout": timeout},
             timeout=timeout + 10,
         ).json()
+        return subprocess.CompletedProcess(
+            args=list(cmd), returncode=r["rc"], stdout=r["stdout"], stderr=r["stderr"],
+        )
 
     def write_file(self, path: str, content: str):
         self._http.post(f"{self.url}/write", json={"path": path, "content": content})

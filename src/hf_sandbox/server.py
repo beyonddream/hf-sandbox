@@ -21,7 +21,7 @@ def exec_(req: dict, _=Depends(auth)):
     try:
         p = subprocess.run(
             req["cmd"],
-            cwd=req.get("cwd"),
+            cwd=req.get("workdir"),
             input=req["stdin"].encode() if req.get("stdin") else None,
             capture_output=True,
             timeout=req.get("timeout", 600),

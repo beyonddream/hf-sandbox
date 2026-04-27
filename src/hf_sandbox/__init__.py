@@ -1,3 +1,3 @@
-from hf_sandbox.client import HFSandbox
+from hf_sandbox.client import Sandbox
 
-__all__ = ["HFSandbox"]
+__all__ = ["Sandbox"]
