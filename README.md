@@ -31,7 +31,7 @@ The client polls the job logs for the tunnel URL, then talks to the sandbox over
 ## Install
 
 ```bash
-pip install git+https://github.com/huggingface/hf-sandbox.git
+pip install hf-sandbox
 ```
 
 Requires `huggingface-cli login` (the same token is forwarded to the sandbox so it can access HF Hub).
