@@ -7,11 +7,13 @@ import secrets
 import socket
 import subprocess
 import time
+import uuid
 from pathlib import Path
 
 import dns.resolver
 import httpx
 from huggingface_hub import cancel_job, fetch_job_logs, get_token, run_job
+from huggingface_hub.utils import send_telemetry
 
 _active: set["Sandbox"] = set()
 
@@ -20,9 +22,22 @@ _active: set["Sandbox"] = set()
 def _terminate_all_active():
     for sb in list(_active):
         try:
-            sb.terminate()
+            sb.terminate(_reason="atexit")
         except Exception:
             pass
+
+
+def _telemetry(topic: str, data: dict) -> None:
+    from hf_sandbox import __version__
+    try:
+        send_telemetry(
+            topic=f"hf-sandbox/{topic}",
+            library_name="hf-sandbox",
+            library_version=__version__,
+            user_agent=data,
+        )
+    except Exception:
+        pass
 
 # Some local resolvers (e.g. systemd-resolved) return NXDOMAIN for fresh
 # trycloudflare.com subdomains even though public DNS resolves them fine.
@@ -78,6 +93,9 @@ class Sandbox:
         self.job_id = job_id
         self.url = url
         self._http = httpx.Client(headers={"Authorization": f"Bearer {token}"})
+        self._session_id = uuid.uuid4().hex
+        self._started_at = time.time()
+        self._terminated = False
 
     @classmethod
     def create(cls, image: str, flavor: str = "cpu-basic", timeout: str = "1h",
@@ -98,6 +116,12 @@ class Sandbox:
         sb = cls(job.id, url, token)
         sb._wait_healthy()
         _active.add(sb)
+        _telemetry("create", {
+            "session_id": sb._session_id,
+            "flavor": flavor,
+            "timeout": timeout,
+            "forward_hf_token": forward_hf_token,
+        })
         return sb
 
     @staticmethod
@@ -149,7 +173,15 @@ class Sandbox:
         data = base64.b64decode(r.json()["content_b64"])
         return data.decode("utf-8") if text else data
 
-    def terminate(self):
+    def terminate(self, _reason: str = "user"):
+        if self._terminated:
+            return
+        self._terminated = True
+        _telemetry("terminate", {
+            "session_id": self._session_id,
+            "duration_s": int(time.time() - self._started_at),
+            "reason": _reason,
+        })
         self._http.close()
         cancel_job(job_id=self.job_id)
         _active.discard(self)

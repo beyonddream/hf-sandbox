@@ -45,3 +45,14 @@ The sandbox runs **untrusted code by design**. A few things to be aware of:
 - **HF token forwarding is opt-in.** By default, your HF token is *not* exposed to the sandbox. Pass `forward_hf_token=True` to `Sandbox.create()` if your workload needs it. With it enabled, anything running inside the sandbox can read the token from `/proc/self/environ` and use it to act as you on the Hub.
 - **Cloudflare sees all tunnel traffic.** Requests, responses, and the auth token transit Cloudflare's infrastructure (via `trycloudflare.com`). They state they don't log it, but it's a trust relationship. Don't run sensitive workloads through it.
 - **Auth token** is a 256-bit random URL-safe string per sandbox, sent as `Bearer` on every authenticated endpoint. The tunnel URL alone gets you nothing.
+
+## Telemetry
+
+`hf-sandbox` reports anonymous usage data to help us understand how the library is used. Two events are sent per sandbox:
+
+- `hf-sandbox/create` — flavor, timeout, whether `forward_hf_token` was set, and a random per-sandbox session id
+- `hf-sandbox/terminate` — same session id, duration in seconds, and termination reason
+
+We never send: the image name, commands, file paths, file contents, the tunnel URL, the auth token, your HF token, your username, or anything from inside the sandbox.
+
+Disable by setting `HF_HUB_DISABLE_TELEMETRY=1` (or `DO_NOT_TRACK=1`).
