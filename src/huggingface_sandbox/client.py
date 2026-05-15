@@ -153,4 +153,38 @@ class Sandbox:
       json={'cmd': list(cmd), 'workdir': workdir, 'stdin': stdin, 'timeout': timeout},
       timeout=timeout + 10,
     )
+    r.raise_for_status()
+    body = r.json()
+    return subprocess.CompletedProcess(
+      args=list(cmd), returncode=body['rc'], stdout=body['stdout'], stderr=body['stderr'],
+    )
     
+  def write_file(self, path: str, content: str | bytes):
+    if isinstance(content, bytes):
+      payload = {'path': path, 'content_b64': base64.b64encode(content).decode()}
+    else:
+      payload = {'path': path, 'content': content}
+    r = self._http.post(f'{self.url}/write', json=payload)
+    r.raise_for_status()
+
+  def read_file(self, path: str, text: bool = True) -> str | bytes:
+    r = self._http.post(f'{self.url}/read', json={'path': path})
+    if r.status_code == 404:
+      raise FileNotFoundError(r.json().get('detail', path))
+    r.raise_for_status()
+    data = base64.b64decode(r.json()['content_b64'])
+    return data.decode('utf-8') if text else data
+
+  def terminate(self, _reason: str = 'user'):
+    if self._terminated:
+      return
+    self._terminated = True
+    _telemetry('terminate', {
+      'session_id': self._session_id,
+      'duration_s': int(time.time() - self._started_at),
+      'reason': _reason
+    })
+    self._http.close()
+    cancel_job(job_id=self.job_id)
+    _active.discard(self)
+  
