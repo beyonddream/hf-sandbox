@@ -82,3 +82,75 @@ exec /tmp/cf tunnel --url http://localhost:8000 --no-autoupdate 2>&1
 '''
 
 _URL_RE = re.compile(r'https://[a-z0-9-]+\.trycloudflare\.com')
+
+class Sandbox:
+
+  def __init__(self, job_id: str, url: str, token: str):
+    self.job_id = job_id
+    self.url = url
+    self._http = httpx.Client(headers={'Authorization': f'Bearer {token}'})
+    self._session_id = uuid.uuid4().hex
+    self._started_at = time.time()
+    self._terminated = False
+
+  @classmethod
+  def create(cls, image: str, flavor: str = 'cpu-basic', timeout: str = '1h',
+    forward_hf_token: bool = False):
+    token = secrets.token_urlsafe(32)
+    job_secrets = {'HF_SANDBOX_TOKEN': token}
+    if forward_hf_token:
+      job_secrets['HF_TOKEN'] = get_token()
+    job = run_job(
+      image=image,
+      command=['bash', '-c', _BOOTSTRAP],
+      secrets=job_secrets,
+      flavor=flavor,
+      timeout=timeout,
+    )
+    url = cls._wait_for_url(job.id)
+    _register_public_dns_override(url.split('://', 1)[1].split('/', 1)[0])
+    sb = cls(job.id, url, token)
+    sb._wait_healthy()
+    _active.add(sb)
+    _telemetry(
+      'create',
+      {
+        'session_id': sb._session_id,
+        'flavor': flavor,
+        'timeout': timeout,
+        'forward_hf_token': forward_hf_token
+      }
+    )
+    return sb
+
+  @staticmethod
+  def _wait_for_url(job_id: str, timeout: float = 300) -> str:
+    deadline = time.time() + timeout
+    for line in fetch_job_logs(job_id=job_id, follow=True):
+      m = _URL_RE.search(line)
+      if m:
+        return m.group(0)
+      if time.time() > deadline:
+        break
+    raise TimeoutError(f'tunnel URL never appearted in logs for job {job_id}')
+
+  def _wait_healthy(self, timeout: float = 60):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+      try:
+        if self._http.get(f'{self.url}/health', timeout=5).status_code == 200:
+          return
+      except httpx.HTTPError:
+        pass
+      time.sleep(1)
+    raise TimeoutError(f'sandbox at {self.url} never became healthy')
+
+
+  def exec(self, *cmd: str, workdir: str | None = None, stdin: str | None = None,
+    timeout: int = 600) -> subprocess.CompletedProcess:
+    r = self._http.post(
+      f'{self.url}/exec',
+      json={'cmd': list(cmd), 'workdir': workdir, 'stdin': stdin, 'timeout': timeout},
+      timeout=timeout + 10,
+    )
+    
