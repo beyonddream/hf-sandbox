@@ -40,7 +40,7 @@ def _telemetry(topic: str, data: dict) -> None:
     pass
 
 # Some local resolvers (e.g. systemd-resolved) return NXDOMAIN for fresh
-# trycloudflare.com subdomains even though public DNS resolves them fine.
+# tunnel subdomains even though public DNS resolves them fine.
 # We bypass the system resolver by looking up via 1.1.1.1 and overriding
 # socket.getaddrinfo for hosts we explicitly register.
 _HOST_OVERRIDES: dict[str, str] = {}
@@ -132,8 +132,7 @@ class Sandbox:
     )
     url = cls._wait_for_url(job.id)
     hostname = url.split('://', 1)[1].split('/', 1)[0]
-    if hostname.endswith('.trycloudflare.com'):
-      _register_public_dns_override(hostname)
+    _register_public_dns_override(hostname)
     sb = cls(job.id, url, token)
     sb._wait_healthy()
     _active.add(sb)

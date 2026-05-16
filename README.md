@@ -1,12 +1,12 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.png">
-  <img alt="hf-sandbox" src="assets/banner-light.png">
+  <img alt="huggingface-sandbox" src="assets/banner-light.png">
 </picture>
 
 Modal-style sandbox API on top of Hugging Face Jobs.
 
 ```python
-from hf_sandbox import Sandbox
+from huggingface_sandbox import Sandbox
 
 sb = Sandbox.create(image="python:3.12")
 proc = sb.exec("python", "-c", "print(1+1)")  # → CompletedProcess(stdout='2\n', returncode=0, ...)
@@ -43,7 +43,7 @@ The client polls the job logs for the tunnel URL, then talks to the sandbox over
 ## Install
 
 ```bash
-pip install hf-sandbox
+pip install huggingface-sandbox
 ```
 
 Requires `hf auth login` (the same token is forwarded to the sandbox so it can access HF Hub).
@@ -64,10 +64,10 @@ The sandbox runs **untrusted code by design**. A few things to be aware of:
 
 ## Telemetry
 
-`hf-sandbox` reports anonymous usage data to help us understand how the library is used. Two events are sent per sandbox:
+`huggingface-sandbox` reports anonymous usage data to help us understand how the library is used. Two events are sent per sandbox:
 
-- `hf-sandbox/create` — flavor, timeout, tunnel provider, whether `forward_hf_token` was set, and a random per-sandbox session id
-- `hf-sandbox/terminate` — same session id, duration in seconds, and termination reason
+- `huggingface-sandbox/create` — flavor, timeout, tunnel provider, whether `forward_hf_token` was set, and a random per-sandbox session id
+- `huggingface-sandbox/terminate` — same session id, duration in seconds, and termination reason
 
 We never send: the image name, commands, file paths, file contents, the tunnel URL, the auth token, your HF token, your username, or anything from inside the sandbox.
 
